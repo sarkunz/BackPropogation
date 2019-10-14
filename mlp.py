@@ -66,7 +66,7 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         np.append(Z1, self.initial_weights['B1'])
         A1 = self.sigmoid(Z1)
 
-        Z2 = self.initial_weights['W2'].dot(A1) + self.initial_weights['B2']
+        Z2 = self.initial_weights['W2'].dot(A1)# + self.initial_weights['B2']
         np.append(Z2, self.initial_weights['B2'])
         A2 = self.sigmoid(Z2)
 

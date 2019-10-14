@@ -4,11 +4,19 @@ import numpy as np
 import pandas as pd
 
 
-mat = Arff("../datasets/linsep2nonorigin.arff")
+mat = Arff("datasets/linsep2nonorigin.arff")
 data = mat.data[:,0:-1]
 labels = mat.data[:,-1].reshape(-1,1)
-BClass = MLPClassifier(LR=0.1,momentum=0.5,shuffle=False,deterministic=10)
-BClass.fit(data,labels)
+
+num_features = np.size(data, 1)
+num_inputs = np.size(data, 0)
+num_outputs = 1
+hiddenLayers = [num_features, num_features * 2, num_outputs]
+print("LAYER INFO INPUT")
+print(hiddenLayers)
+
+MLP = MLPClassifier(hiddenLayers,lr=0.1,momentum=0.5,shuffle=False)
+MLP.fit(data,labels)
 
 
 # mat = Arff("../datasets/data_banknote_authentication.arff")

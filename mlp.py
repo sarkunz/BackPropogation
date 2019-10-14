@@ -25,15 +25,8 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         self.lr = lr
         self.momentum = momentum
         self.shuffle = shuffle
-        self.weights = []
-        self.network = []
-
-    def createNetwork(data, initial_weights):
-        network = []
-        input_dim = data.shape[1]
-        self.hidden_weights = self.initialize_weights() if not initial_weights else initial_weights
-        network.append
-        self.output_layer = self.initialize_weights()
+        self.initial_weights = []
+        self.ch = {}
 
 
     def fit(self, X, y, initial_weights=None):
@@ -45,11 +38,51 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         Returns:
             self: this allows this to be chained, e.g. model.fit(X,y).predict(X_test)
         """
-        self.createNetwork(X, initial_weights)
-
+        self.num_tr_sams = y.shape[0]
+        
         self.initial_weights = self.initialize_weights() if not initial_weights else initial_weights
+        print(self.initial_weights)
+
+        output = self.forward(X)
+        print(output)
+        loss = self.nloss(output, y)
+        print(loss)
 
         return self
+
+    def sigmoid(self, Z):
+        return 1/(1+np.exp(-Z))
+
+    def dSigmoid(self, Z):
+        s = 1/(1+np.exp(-Z))
+        dZ = s * (1-s)
+        return dZ
+
+    def forward(self, X):
+        print("FORWARD-------")
+        X = X.transpose()
+
+        Z1 = self.initial_weights['W1'].dot(X)#+ self.initial_weights['B1']
+        np.append(Z1, self.initial_weights['B1'])
+        A1 = self.sigmoid(Z1)
+
+        Z2 = self.initial_weights['W2'].dot(A1) + self.initial_weights['B2']
+        np.append(Z2, self.initial_weights['B2'])
+        A2 = self.sigmoid(Z2)
+
+        output = A2
+        print("OUT")
+        print(output)
+        return output
+
+    def backprop(self, Y):
+        Y = Y.transpose()
+        #dloss = (1/self.num_tr_sams) * (-np.dot(Y,np.log(output).T) - np.dot(1-Y, np.log(1-output).T))
+
+    def nloss(self, output, Y):
+        Y = Y.transpose()
+        loss = (1/self.num_tr_sams) * (-np.dot(Y,np.log(output).T) - np.dot(1-Y, np.log(1-output).T))
+        return loss
 
     def predict(self, X):
         """ Predict all classes for a dataset X
@@ -65,7 +98,13 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         """ Initialize weights for perceptron. Don't forget the bias!
         Returns:
         """
-        return numpy.random.normal(0, 1, self.num_hidden_layers + 1) #+1 for bias
+        weights = {}
+        np.random.seed(1)
+        weights['W1'] = np.random.normal(0, 1, size=[self.hidden_layer_widths[1], self.hidden_layer_widths[0]])
+        weights['B1'] = np.ones(self.hidden_layer_widths[1])
+        weights['W2'] = np.random.normal(0, 1, size=[self.hidden_layer_widths[2], self.hidden_layer_widths[1]])
+        weights['B2'] = np.ones(self.hidden_layer_widths[2])
+        return  weights
 
     def score(self, X, y):
         """ Return accuracy of model on a given dataset. Must implement own score function.

@@ -30,7 +30,6 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         self.accuracy = 0
         self.validationSize = validationSize
         self.deterministic = deterministic
-        self.Z1 = []
 
     def addBias(self, X):
         # biasCol = np.ones(X.shape[0]).reshape(-1,1)
@@ -68,7 +67,6 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
             #stochastic! So iterate through the data and update as we go
             for row, label in zip(trainData, trainLabels): 
                 row = np.append(row, 1)
-                print("pred with", row)
                 O2 = self.forward(row) #concat the 1 for bias
                 loss = self.mse(O2, label)
                 self.backprop(row, label)
@@ -167,7 +165,7 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
                 Predicted target values per element in X.
         """
 
-        pred = self.forward(np.append(X, 1))
+        pred = self.forward(X)
         print("--PRED--", pred)
         #ARGMAX???
 

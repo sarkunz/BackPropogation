@@ -38,15 +38,28 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         Returns:
             self: this allows this to be chained, e.g. model.fit(X,y).predict(X_test)
         """
+
+        if(self.shuffle): X, y = self._shuffle_data(X, y)
         self.num_tr_sams = y.shape[0]
         
         self.initial_weights = self.initialize_weights() if not initial_weights else initial_weights
         print(self.initial_weights)
 
-        output = self.forward(X)
-        print(output)
-        loss = self.nloss(output, y)
-        print(loss)
+        for i in range(0, 3000):
+            init_output = self.forward(X)
+            loss = self.nloss(init_output, y)
+            self.backprop(X, y)
+
+            if(i % 500 == 0):
+                print ("Cost after iteration %i: %f" %(i, loss))
+
+        print("final loss ", loss)
+
+        # init_output = self.forward(X)
+        # print(init_output)
+        # loss = self.nloss(init_output, y)
+        # print(loss)
+        # fin_output = self.backprop(X, y)
 
         return self
 
@@ -59,25 +72,42 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         return dZ
 
     def forward(self, X):
-        print("FORWARD-------")
         X = X.transpose()
 
-        Z1 = self.initial_weights['W1'].dot(X)#+ self.initial_weights['B1']
-        np.append(Z1, self.initial_weights['B1'])
-        A1 = self.sigmoid(Z1)
+        #activation
+        self.Z1 = self.initial_weights['W1'].dot(X)#+ self.initial_weights['B1']
+        np.append(self.Z1, self.initial_weights['B1'])
+        #squishify
+        self.A1 = self.sigmoid(self.Z1)
 
-        Z2 = self.initial_weights['W2'].dot(A1)# + self.initial_weights['B2']
-        np.append(Z2, self.initial_weights['B2'])
-        A2 = self.sigmoid(Z2)
+        self.Z2 = self.initial_weights['W2'].dot(self.A1)# + self.initial_weights['B2']
+        np.append(self.Z2, self.initial_weights['B2'])
+        self.init_outp = self.sigmoid(self.Z2)
 
-        output = A2
-        print("OUT")
-        print(output)
-        return output
+        return self.init_outp
 
-    def backprop(self, Y):
+    def backprop(self, X, Y):
+        X = X.transpose()
         Y = Y.transpose()
-        #dloss = (1/self.num_tr_sams) * (-np.dot(Y,np.log(output).T) - np.dot(1-Y, np.log(1-output).T))
+
+        dLoss_init_outp = -(np.divide(Y, self.init_outp) - np.divide(1 - Y, 1 - self.init_outp))
+
+        dLoss_Z2 = dLoss_init_outp * self.dSigmoid(self.Z2) 
+        dLoss_A1 = np.dot(self.initial_weights["W2"].T, dLoss_Z2)
+        dLoss_W2 = 1./self.A1.shape[1] * np.dot(dLoss_Z2,self.A1.T)
+        dLoss_b2 = 1./self.A1.shape[1] * np.dot(dLoss_Z2, np.ones([dLoss_Z2.shape[1],1])) 
+
+        dLoss_Z1 = dLoss_A1 * self.dSigmoid(self.Z1)        
+        dLoss_A0 = np.dot(self.initial_weights["W1"].T, dLoss_Z1)
+        dLoss_W1 = 1./X.shape[1] * np.dot(dLoss_Z1, X.T)
+        dLoss_b1 = 1./X.shape[1] * np.dot(dLoss_Z1, np.ones([dLoss_Z1.shape[1],1])) 
+
+        self.initial_weights["W1"] = self.initial_weights["W1"] - self.lr * dLoss_W1
+        self.initial_weights["b1"] = self.initial_weights["B1"] - self.lr * dLoss_b1
+        self.initial_weights["W2"] = self.initial_weights["W2"] - self.lr * dLoss_W2
+        self.initial_weights["b2"] = self.initial_weights["B2"] - self.lr * dLoss_b2
+
+        return
 
     def nloss(self, output, Y):
         Y = Y.transpose()
@@ -92,6 +122,7 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
             array, shape (n_samples,)
                 Predicted target values per element in X.
         """
+
         pass
 
     def initialize_weights(self):
@@ -123,8 +154,14 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
             It might be easier to concatenate X & y and shuffle a single 2D array, rather than
              shuffling X and y exactly the same way, independently.
         """
-        pass
+        allData = np.concatenate((X, y), axis=1)
+
+        np.random.shuffle(allData)
+        
+        y = allData[: , allData.shape[1]-1:]
+        X = allData[:, :allData.shape[1]-1]
+        return X, y
 
     ### Not required by sk-learn but required by us for grading. Returns the weights.
     def get_weights(self):
-        pass
+        return self.initial_weights

@@ -1,5 +1,8 @@
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin
+import math
+from sklearn.preprocessing import OneHotEncoder
+
 
 ### NOTE: The only methods you are required to have are:
 #   * predict
@@ -11,7 +14,7 @@ from sklearn.base import BaseEstimator, ClassifierMixin
 
 class MLPClassifier(BaseEstimator,ClassifierMixin):
 
-    def __init__(self, hidden_layer_widths, lr=.1, momentum=0, shuffle=True):
+    def __init__(self, hidden_layer_widths, lr=.1, momentum=0, shuffle=True, validationSize=0.0, deterministic=False):
         """ Initialize class with chosen hyperparameters.
         Args:
             hidden_layer_widths (list(int)): A list of integers which defines the width of each hidden layer
@@ -25,9 +28,19 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         self.lr = lr
         self.momentum = momentum
         self.shuffle = shuffle
-        self.initial_weights = []
-        self.ch = {}
+        self.weights = []
+        self.accuracy = 0
+        self.validationSize = validationSize
+        self.deterministic = deterministic
+        self.Z1 = []
 
+        self.dW1 = 0
+        self.dW2 = 0
+
+    def keepGoing(self, det, noChange):
+        if(noChange >= 20): return False
+        if(det <= 0): return False
+        return True
 
     def fit(self, X, y, initial_weights=None):
         """ Fit the data; run the algorithm and adjust the weights to find a good solution
@@ -39,79 +52,70 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
             self: this allows this to be chained, e.g. model.fit(X,y).predict(X_test)
         """
 
-        if(self.shuffle): X, y = self._shuffle_data(X, y)
-        self.num_tr_sams = y.shape[0]
+        #set training and validation data
+        trainData, trainLabels, validData, validLabels = self.splitValidation(X, y, self.validationSize)
         
-        self.initial_weights = self.initialize_weights() if not initial_weights else initial_weights
-        print(self.initial_weights)
+        self.weights = self.initialize_weights() if not initial_weights else initial_weights
 
-        for i in range(0, 3000):
-            init_output = self.forward(X)
-            loss = self.nloss(init_output, y)
-            self.backprop(X, y)
-
-            if(i % 500 == 0):
-                print ("Cost after iteration %i: %f" %(i, loss))
-
-        print("final loss ", loss)
-
-        # init_output = self.forward(X)
-        # print(init_output)
-        # loss = self.nloss(init_output, y)
-        # print(loss)
-        # fin_output = self.backprop(X, y)
-
+        noChange = 0
+        bestScore = 0
+        det = self.deterministic
+        while(self.keepGoing(det, noChange)):
+            #shuffle each epoch
+            if(self.shuffle): trainData, trainLabels = self._shuffle_data(trainData, trainLabels)
+            #stochastic! So iterate through the data and update as we go
+            for row, label in zip(trainData, self.oneHotCode(trainLabels)): #TODO fix!!
+                row = np.append(row, 1)
+                O2 = self.forward(row) #concat the 1 for bias
+                loss = self.mse(O2, label)
+                self.backprop(row, label)
+            
+            #stopping criteria
+            if(det): det -= 1
+            else:
+                score = self.score(validData, validLabels) #HOT??
+                if(math.abs(bestScore - score) <= .005):
+                    noChange += 1
+                if(bestScore < score): bestScore = score
+                if(noChange > 20): break
+            
         return self
 
     def sigmoid(self, Z):
         return 1/(1+np.exp(-Z))
 
-    def dSigmoid(self, Z):
-        s = 1/(1+np.exp(-Z))
-        dZ = s * (1-s)
-        return dZ
+    def forward(self, Xrow):
+        self.Z1 = np.dot(self.weights['W1'], Xrow.T)
+        self.O1 = self.sigmoid(self.Z1)
+        self.O1 = np.append(self.O1, [1]) #append bias to layer
+        
+        self.Z2 = np.dot(self.weights['W2'], self.O1.reshape(-1,1))
+        self.O2 = self.sigmoid(self.Z2)
 
-    def forward(self, X):
-        X = X.transpose()
+        return self.O2
 
-        #activation
-        self.Z1 = self.initial_weights['W1'].dot(X)#+ self.initial_weights['B1']
-        np.append(self.Z1, self.initial_weights['B1'])
-        #squishify
-        self.A1 = self.sigmoid(self.Z1)
+    def backprop(self, row, labels):
+        row = row.reshape(-1,1)
+        O2 = self.O2.reshape(-1,1)#[0]
 
-        self.Z2 = self.initial_weights['W2'].dot(self.A1)# + self.initial_weights['B2']
-        np.append(self.Z2, self.initial_weights['B2'])
-        self.init_outp = self.sigmoid(self.Z2)
+        S = (labels.reshape(-1,1) - O2)*(O2)*(1 - O2)
+        dW2 = (self.lr * S * self.O1) + (self.momentum * (self.dW2))  #zhe shi yi ge array, suo yi treat as such
 
-        return self.init_outp
+        S2 = self.O1 * (1-self.O1) * np.dot(S.T, self.weights['W2']) #* S * self.weights['W2']
+        dW1 = (self.lr * row * S2[:,:S2.shape[1] - 1]) +  (self.momentum * (self.dW1))#Don't need to propogate bias backwards
 
-    def backprop(self, X, Y):
-        X = X.transpose()
-        Y = Y.transpose()
+        self.weights['W2'] += dW2
+        self.weights['W1'] += dW1.T
 
-        dLoss_init_outp = -(np.divide(Y, self.init_outp) - np.divide(1 - Y, 1 - self.init_outp))
-
-        dLoss_Z2 = dLoss_init_outp * self.dSigmoid(self.Z2) 
-        dLoss_A1 = np.dot(self.initial_weights["W2"].T, dLoss_Z2)
-        dLoss_W2 = 1./self.A1.shape[1] * np.dot(dLoss_Z2,self.A1.T)
-        dLoss_b2 = 1./self.A1.shape[1] * np.dot(dLoss_Z2, np.ones([dLoss_Z2.shape[1],1])) 
-
-        dLoss_Z1 = dLoss_A1 * self.dSigmoid(self.Z1)        
-        dLoss_A0 = np.dot(self.initial_weights["W1"].T, dLoss_Z1)
-        dLoss_W1 = 1./X.shape[1] * np.dot(dLoss_Z1, X.T)
-        dLoss_b1 = 1./X.shape[1] * np.dot(dLoss_Z1, np.ones([dLoss_Z1.shape[1],1])) 
-
-        self.initial_weights["W1"] = self.initial_weights["W1"] - self.lr * dLoss_W1
-        self.initial_weights["b1"] = self.initial_weights["B1"] - self.lr * dLoss_b1
-        self.initial_weights["W2"] = self.initial_weights["W2"] - self.lr * dLoss_W2
-        self.initial_weights["b2"] = self.initial_weights["B2"] - self.lr * dLoss_b2
+        self.dW2 = dW2
+        self.dW1 = dW1
 
         return
 
-    def nloss(self, output, Y):
-        Y = Y.transpose()
-        loss = (1/self.num_tr_sams) * (-np.dot(Y,np.log(output).T) - np.dot(1-Y, np.log(1-output).T))
+    def mse(self, output, label):
+        squared_errors = (output - label) ** 2
+        loss= np.sum(squared_errors)
+
         return loss
 
     def predict(self, X):
@@ -123,7 +127,12 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
                 Predicted target values per element in X.
         """
 
-        pass
+        pred = self.forward(np.append(X, 1))
+        #print("predInit", pred)
+        pred = np.argmax(pred)
+        #ARGMAX???
+
+        return pred
 
     def initialize_weights(self):
         """ Initialize weights for perceptron. Don't forget the bias!
@@ -131,11 +140,15 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         """
         weights = {}
         np.random.seed(1)
-        weights['W1'] = np.random.normal(0, 1, size=[self.hidden_layer_widths[1], self.hidden_layer_widths[0]])
-        weights['B1'] = np.ones(self.hidden_layer_widths[1])
-        weights['W2'] = np.random.normal(0, 1, size=[self.hidden_layer_widths[2], self.hidden_layer_widths[1]])
-        weights['B2'] = np.ones(self.hidden_layer_widths[2])
+        #Remember + 1 is for bias
+        weights['W1'] = np.random.normal(0, 1, size=[self.hidden_layer_widths[1], self.hidden_layer_widths[0] + 1])
+        weights['W2'] = np.random.normal(0, 1, size=[self.hidden_layer_widths[2], self.hidden_layer_widths[1] + 1])
         return  weights
+
+    def oneHotCode(self, labels): #to rule them all
+        onehotencoder = OneHotEncoder(categorical_features = [0])
+        hottie = onehotencoder.fit_transform(labels).toarray()
+        return hottie
 
     def score(self, X, y):
         """ Return accuracy of model on a given dataset. Must implement own score function.
@@ -146,8 +159,57 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
             score : float
                 Mean accuracy of self.predict(X) wrt. y.
         """
+        correctCount = 0
+        totalCount = 0
+        #print("y")
+        #print(y.reshape(-1))
+        #print(self.oneHotCode(y).reshape(-1))
 
-        return 0
+        for inputs, exp in zip(X, self.oneHotCode(y)):
+            pred = self.predict(inputs)
+            # print("pred", pred)
+            # print("exp", exp)
+            #exp = np.asscalar(exp)
+            # print("pred", pred)
+            # print("exp", exp)
+            if(exp[pred] == 1): correctCount += 1
+            totalCount += 1
+
+        self.accuracy = correctCount/totalCount
+        #find num outputs that we got right
+        return self.accuracy
+
+    def splitTestTrainData(self, X, y):
+        #75/25 for nuw
+        if(self.shuffle): 
+            X, y = self._shuffle_data(X, y)
+
+        numRows = np.size(X, 0)
+        trainRows = math.floor(numRows / 4 * 3)
+
+        trainData = X[0:trainRows, :]
+        trainLabels = y[0:trainRows, :]
+
+        testData = X[trainRows:, :]
+        testLabels = y[trainRows:, :]
+
+        #print("testlabels", trainLabels.reshape(-1))
+
+        return trainData, trainLabels, testData, testLabels
+        
+    def splitValidation(self, X, y, validSize):
+        if(validSize == 0): return X, y, [], []
+        numRows = np.size(X, 0)
+        if(self.shuffle): self._shuffle_data(X, y)
+
+        trainRows = math.floor(numRows * validSize)
+
+        trainData = X[0:trainRows, :]
+        trainLabels = y[0:trainRows, :]
+
+        validData = X[trainRows:, :]
+        validLabels = y[trainRows:, :]
+        return trainData, trainLabels, validData, validLabels
 
     def _shuffle_data(self, X, y):
         """ Shuffle the data! This _ prefix suggests that this method should only be called internally.
@@ -164,4 +226,4 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
 
     ### Not required by sk-learn but required by us for grading. Returns the weights.
     def get_weights(self):
-        return self.initial_weights
+        return self.weights

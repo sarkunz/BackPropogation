@@ -32,12 +32,13 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         self.deterministic = deterministic
         self.Z1 = []
 
-    def addBias(self, X):
-        # biasCol = np.ones(X.shape[0]).reshape(-1,1)
-        # print(biasCol)
-        # X = np.concatenate((X, np.ones(X.shape[0]).reshape(-1,1)), 1)
-        # print(X)
-        return X
+        self.dW1 = 0
+        self.dW2 = 0
+
+    def keepGoing(self, det, noChange):
+        if(noChange >= 20): return False
+        if(det <= 0): return False
+        return True
 
     def fit(self, X, y, initial_weights=None):
         """ Fit the data; run the algorithm and adjust the weights to find a good solution
@@ -50,47 +51,49 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         """
 
         #set training and validation data
+        validData = []
+        validLabels = []
         if(self.validationSize):
             trainData, trainLabels, validData, validLabels = self.splitValidation(X, y, self.validationSize)
         else:
             trainData = X
             trainLabels = y
-
-        trainData = self.addBias(trainData)
         
         self.weights = self.initialize_weights() if not initial_weights else initial_weights
         print(self.weights)
 
-        det = self.deterministic if self.deterministic else float('inf')
-        for i in range(0, 1):#det):
+        noChange = 0
+        lastScore = 0
+        det = self.deterministic
+        #for i in range(0, det):#det):
+        while(self.keepGoing(det, noChange)):
             #shuffle each epoch
             if(self.shuffle): trainData, trainLabels = self._shuffle_data(trainData, trainLabels)
             #stochastic! So iterate through the data and update as we go
             for row, label in zip(trainData, trainLabels): 
                 row = np.append(row, 1)
-                print("pred with", row)
                 O2 = self.forward(row) #concat the 1 for bias
                 loss = self.mse(O2, label)
                 self.backprop(row, label)
-                
-                if(i > 5000): break
-
-        #print("final loss ", loss)
-
+            
+            #stopping criteria
+            if(det): det -= 1
+            else:
+                score = self.score(validData, validLabels)
+                if(lastScore - score > .005):
+                    noChange += 1
+                lastScore = score
+                if(noChange > 20): break
+            
         return self
 
     def sigmoid(self, Z):
         return 1/(1+np.exp(-Z))
 
-    def dSigmoid(self, Z):
-        s = 1/(1+np.exp(-Z))
-        dZ = s * (1-s)
-        return dZ
-
     def forward(self, Xrow):
-        print("Z1", self.Z1)
-        print("W2", self.weights['W2'])
-        print("XROWT", Xrow.T)
+        # print("Z1", self.Z1)
+        # print("W2", self.weights['W2'])
+        # print("XROWT", Xrow.T)
         self.Z1 = np.dot(self.weights['W1'], Xrow.T)
         self.Z1 = np.append(self.Z1, 1) #append bias to layer 2
         self.O1 = self.sigmoid(self.Z1)
@@ -100,59 +103,26 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
 
         return self.O2
 
-        #activation
-        # self.Z1 = self.weights['W1'].dot(X)#+ self.weights['B1']
-        # print("Z1!!!!!!!!!")
-        # print(self.Z1)
-        # np.append(self.Z1, self.weights['B1'])
-        # #squishify
-        # self.O1 = self.sigmoid(self.Z1)
-
-        # self.Z2 = self.weights['W2'].dot(self.O1)# + self.weights['B2']
-        # np.append(self.Z2, self.weights['B2'])
-        # self.O2 = self.sigmoid(self.Z2)
-
-        # print("oooooutput", self.O2)
-        #return self.O2
-
-    def backprop(self, row, label):
-        # X = X.transpose()
-        # Y = Y.transpose()
+    def backprop(self, row, labels):
         row = row.reshape(-1,1)
 
-        O2 = self.O2[0]
+        O2 = self.O2.reshape(-1,1)#[0]
 
-        S = (label - O2)*(O2)*(1 - O2)
-        dW2 = self.lr * S * self.O1 #zhe shi yi ge array, suo yi treat as such
-        
-        S2 = self.O1 * (1-self.O1) * S * self.weights['W2']
-        dW1 = self.lr * row * S2[:,:S2.shape[1] - 1] #Don't need to propogate bias backwards
+        S = (labels - O2)*(O2)*(1 - O2)
+        dW2 = (self.lr * S * self.O1) + (self.momentum * (self.dW2))  #zhe shi yi ge array, suo yi treat as such
+
+        S2 = self.O1 * (1-self.O1) * np.dot(S.T, self.weights['W2']) #* S * self.weights['W2']
+        dW1 = (self.lr * row * S2[:,:S2.shape[1] - 1]) +  (self.momentum * (self.dW1))#Don't need to propogate bias backwards
         
         self.weights['W2'] += dW2
         self.weights['W1'] += dW1.T
 
-        #weird stuff
-        # dLoss_O2 = -(np.divide(Y, self.O2) - np.divide(1 - Y, 1 - self.O2))
-
-        # dLoss_Z2 = dLoss_O2 * self.dSigmoid(self.Z2) 
-        # dLoss_O1 = np.dot(self.weights["W2"].T, dLoss_Z2)
-        # dLoss_W2 = 1./self.O1.shape[1] * np.dot(dLoss_Z2,self.O1.T)
-        # dLoss_b2 = 1./self.O1.shape[1] * np.dot(dLoss_Z2, np.ones([dLoss_Z2.shape[1],1])) 
-
-        # dLoss_Z1 = dLoss_O1 * self.dSigmoid(self.Z1)        
-        # dLoss_O0 = np.dot(self.weights["W1"].T, dLoss_Z1)
-        # dLoss_W1 = 1./X.shape[1] * np.dot(dLoss_Z1, X.T)
-        # dLoss_b1 = 1./X.shape[1] * np.dot(dLoss_Z1, np.ones([dLoss_Z1.shape[1],1])) 
-
-        # self.weights["W1"] = self.weights["W1"] - self.lr * dLoss_W1 # * self.momentum
-        # self.weights["b1"] = self.weights["B1"] - self.lr * dLoss_b1
-        # self.weights["W2"] = self.weights["W2"] - self.lr * dLoss_W2
-        # self.weights["b2"] = self.weights["B2"] - self.lr * dLoss_b2
+        self.dW2 = dW2
+        self.dW1 = dW1
 
         return
 
     def mse(self, output, label):
-        #Y = Y.transpose()
         squared_errors = (output - label) ** 2
         loss= np.sum(squared_errors)
 
@@ -168,6 +138,7 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         """
 
         pred = self.forward(np.append(X, 1))
+        pred = np.argmax(pred)
         print("--PRED--", pred)
         #ARGMAX???
 
@@ -197,11 +168,14 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         totalCount = 0
 
         for inputs, exp in zip(X, y):
-            prediction = self.predict(inputs)
-            if(prediction == exp): correctCount += 1
+            pred = self.predict(inputs)
+            exp = np.asscalar(exp)
+            print("pred", pred)
+            print("exp", exp)
+            if(pred == exp): correctCount += 1
             totalCount += 1
 
-        self.accuracy = 0 #correctCount/totalCount
+        self.accuracy = correctCount/totalCount
         #find num outputs that we got right
         return self.accuracy
 

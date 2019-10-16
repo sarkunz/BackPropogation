@@ -12,7 +12,7 @@ import math
 
 class MLPClassifier(BaseEstimator,ClassifierMixin):
 
-    def __init__(self, hidden_layer_widths, lr=.1, momentum=1, shuffle=True, validationSize=0.0, deterministic=False):
+    def __init__(self, hidden_layer_widths, lr=.1, momentum=0, shuffle=True, validationSize=0.0, deterministic=False):
         """ Initialize class with chosen hyperparameters.
         Args:
             hidden_layer_widths (list(int)): A list of integers which defines the width of each hidden layer
@@ -51,21 +51,14 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         """
 
         #set training and validation data
-        validData = []
-        validLabels = []
-        if(self.validationSize):
-            trainData, trainLabels, validData, validLabels = self.splitValidation(X, y, self.validationSize)
-        else:
-            trainData = X
-            trainLabels = y
+        trainData, trainLabels, validData, validLabels = self.splitValidation(X, y, self.validationSize)
         
         self.weights = self.initialize_weights() if not initial_weights else initial_weights
         print(self.weights)
 
         noChange = 0
-        lastScore = 0
+        bestScore = 0
         det = self.deterministic
-        #for i in range(0, det):#det):
         while(self.keepGoing(det, noChange)):
             #shuffle each epoch
             if(self.shuffle): trainData, trainLabels = self._shuffle_data(trainData, trainLabels)
@@ -80,9 +73,9 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
             if(det): det -= 1
             else:
                 score = self.score(validData, validLabels)
-                if(lastScore - score > .005):
+                if(math.abs(bestScore - score) <= .005):
                     noChange += 1
-                lastScore = score
+                if(bestScore < score): bestScore = score
                 if(noChange > 20): break
             
         return self
@@ -91,14 +84,18 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         return 1/(1+np.exp(-Z))
 
     def forward(self, Xrow):
-        # print("Z1", self.Z1)
-        # print("W2", self.weights['W2'])
-        # print("XROWT", Xrow.T)
         self.Z1 = np.dot(self.weights['W1'], Xrow.T)
-        self.Z1 = np.append(self.Z1, 1) #append bias to layer 2
+        #self.Z1 = np.append(self.Z1, 1) #append bias to layer 2
         self.O1 = self.sigmoid(self.Z1)
+        print("O1-", self.O1)
+        biasVect = self.weights['W2'][:,self.weights['W2'].shape[1]-1:]
+        self.O1 = np.append(self.O1, np.dot(biasVect, [1])) #append bias to layer
+        #self.O1 = self.O1.reshape(-1,1) #append bias to layer 2
+
+        print("O1", self.O1)
+        print("W2", self.weights['W2'])
         
-        self.Z2 = np.dot(self.weights['W2'], self.Z1)
+        self.Z2 = np.dot(self.weights['W2'], self.O1.reshape(-1,1))
         self.O2 = self.sigmoid(self.Z2)
 
         return self.O2
@@ -109,11 +106,16 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         O2 = self.O2.reshape(-1,1)#[0]
 
         S = (labels - O2)*(O2)*(1 - O2)
+        print("S", S)
+        print("old dW2", self.dW2)
         dW2 = (self.lr * S * self.O1) + (self.momentum * (self.dW2))  #zhe shi yi ge array, suo yi treat as such
+        print("dW2", dW2)
 
         S2 = self.O1 * (1-self.O1) * np.dot(S.T, self.weights['W2']) #* S * self.weights['W2']
+        print("S2", S2)
         dW1 = (self.lr * row * S2[:,:S2.shape[1] - 1]) +  (self.momentum * (self.dW1))#Don't need to propogate bias backwards
-        
+        print("dW1", dW1)
+
         self.weights['W2'] += dW2
         self.weights['W1'] += dW1.T
 
@@ -138,6 +140,7 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         """
 
         pred = self.forward(np.append(X, 1))
+        print(pred)
         pred = np.argmax(pred)
         print("--PRED--", pred)
         #ARGMAX???
@@ -183,10 +186,6 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         #75/25 for nuw
         if(self.shuffle): self._shuffle_data(X, y)
 
-        # if(self.entireSet):
-        #     self.trainData = self.allData
-        #     self.testData = self.allData
-        # else:
         numRows = np.size(X, 0)
         trainRows = math.floor(numRows / 10 * 75)
 
@@ -198,6 +197,7 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         return trainData, trainLabels, testData, testLabels
         
     def splitValidation(self, X, y, validSize):
+        if(validSize == 0): return X, y, [], []
         numRows = np.size(X, 0)
         if(self.shuffle): self._shuffle_data(X, y)
 

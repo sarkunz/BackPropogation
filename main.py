@@ -45,7 +45,7 @@ print("SCORE", MLP.score(testData, testLabels))
 #print("----------HW EX------")
 # data = np.array([[0,0],[0,1]])
 # labels = np.array([1,0])
-# hiddenLayers = [2,2,1]
+# hiddenLayers = [2,2,2]
 
 # MLP = MLPClassifier(hiddenLayers,lr=1,momentum=0.5,shuffle=False, validationSize=0.0, deterministic=1)
 # weights = {}
@@ -53,9 +53,6 @@ print("SCORE", MLP.score(testData, testLabels))
 # weights['W2'] = np.ones([hiddenLayers[2], hiddenLayers[1] + 1])
 # MLP.fit(data, labels, weights)
 # print("SCORE", MLP.score(data, labels))
-#print("SCORE", MLP.score(testData, testLabels))
-
-#print("TESTSCORE", MLP.score(testData, testLabels))
 
 
 ###DEBUG DATASET 2

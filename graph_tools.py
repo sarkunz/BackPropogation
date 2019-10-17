@@ -19,7 +19,7 @@ def graph_function(func,save_path=None):
         plt.savefig(save_path) # don't call plt.savefig after plt.show!
     plt.show()
 
-def graph(x, y, labels=None, title="Untitled Graph", xlabel="X", ylabel="Y", points=True, style='fivethirtyeight',
+def graph(x, y, y2=None, labels=None, title="Untitled Graph", xlabel="X", ylabel="Y", points=True, style='fivethirtyeight',
           xlim=None, ylim=None, legend=True, save_path=None):
 
     """ Graph results
@@ -42,6 +42,7 @@ def graph(x, y, labels=None, title="Untitled Graph", xlabel="X", ylabel="Y", poi
     # prep data
     x = np.asarray(x)
     y = np.asarray(y)
+    y2 = np.asarray(y2)
     labels = np.asarray(labels)
 
     # set style, create plot
@@ -62,9 +63,13 @@ def graph(x, y, labels=None, title="Untitled Graph", xlabel="X", ylabel="Y", poi
 
     plot_list = []
 
-    for l in np.unique(labels.astype(int)):
-        idx = np.where(labels==l)
-        plot_list.append(ax.plot(x[idx],y[idx], point_style, label = str(l))[0])
+    if(labels):
+        for l in np.unique(labels.astype(int)):
+            idx = np.where(labels==l)
+            plot_list.append(ax.plot(x[idx],y[idx], point_style, label = str(l))[0])
+    else:
+        ax.plot(x,y)
+        ax.plot(x, y2)
 
     # Put legend below
     if legend:

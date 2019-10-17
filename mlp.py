@@ -1,6 +1,12 @@
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin
 import math
+from sklearn.preprocessing import OneHotEncoder
+import graph_tools
+import matplotlib
+matplotlib.use('Agg')
+
+
 
 ### NOTE: The only methods you are required to have are:
 #   * predict
@@ -27,6 +33,7 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         self.momentum = momentum
         self.shuffle = shuffle
         self.weights = []
+        self.finalWeights = []
         self.accuracy = 0
         self.validationSize = validationSize
         self.deterministic = deterministic
@@ -37,7 +44,7 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
 
     def keepGoing(self, det, noChange):
         if(noChange >= 20): return False
-        if(det <= 0): return False
+        if(self.deterministic and det <= 0): return False
         return True
 
     def fit(self, X, y, initial_weights=None):
@@ -54,46 +61,65 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         trainData, trainLabels, validData, validLabels = self.splitValidation(X, y, self.validationSize)
         
         self.weights = self.initialize_weights() if not initial_weights else initial_weights
-        print(self.weights)
 
         noChange = 0
         bestScore = 0
         det = self.deterministic
+        i = 0
+        self.mseArray = []
+        self.validMseArray = []
         while(self.keepGoing(det, noChange)):
             #shuffle each epoch
             if(self.shuffle): trainData, trainLabels = self._shuffle_data(trainData, trainLabels)
             #stochastic! So iterate through the data and update as we go
-            for row, label in zip(trainData, trainLabels): 
+            trainHotLabels = self.oneHotCode(trainLabels)
+            for row, label in zip(trainData, trainHotLabels): #TODO fix!!
                 row = np.append(row, 1)
                 O2 = self.forward(row) #concat the 1 for bias
-                loss = self.mse(O2, label)
                 self.backprop(row, label)
             
             #stopping criteria
             if(det): det -= 1
             else:
-                score = self.score(validData, validLabels)
-                if(math.abs(bestScore - score) <= .005):
+                score = self.score(validData, validLabels) #HOT??
+                if(abs(bestScore - score) <= .005):
                     noChange += 1
-                if(bestScore < score): bestScore = score
-                if(noChange > 20): break
-            
+                if(bestScore < score):
+                    self.finalWeights = self.weights
+                    bestScore = score
+            i += 1
+            self.mseArray.append(self.mse(self.oneHotCode(O2), trainHotLabels))
+            #score appends to validation array
+        if(len(self.finalWeights) == 0): self.finalWeights = self.weights
+        #self.graphMSEarrays(i)
         return self
+
+    def graphMSEarrays(self, epochs):
+        # x (array-like): a list of x-coordinates
+        # y (array-like): a list of y-coordinates
+        # labels (array-like): a list of integers corresponding to classes
+        # title (str): Title of graph
+        # xlabel (str): X-axis title
+        # ylabel (str): Y-axis title, .5
+        # points (bool): True will plot points, False a line
+        # style: Plot style (e.g. ggplot, fivethirtyeight, classic etc.)
+        # xlim (2-tuple): x-min, x-max
+        # ylim (2-tuple): y-min, y-max
+        # save_path (str): where graph should be saved
+        x = np.arange(0, epochs, 1)
+        print("MSEARRAY", self.mseArray)
+        print(len(self.mseArray))
+        print(x)
+        graph_tools.graph(x=x, y=self.mseArray, y2=self.validMseArray, title="Training MSE", xlabel="epochs", ylabel="MSE", xlim=(0, epochs), style="classic", save_path="graphs/mse")
+
 
     def sigmoid(self, Z):
         return 1/(1+np.exp(-Z))
 
     def forward(self, Xrow):
         self.Z1 = np.dot(self.weights['W1'], Xrow.T)
-        #self.Z1 = np.append(self.Z1, 1) #append bias to layer 2
         self.O1 = self.sigmoid(self.Z1)
-        print("O1-", self.O1)
-        biasVect = self.weights['W2'][:,self.weights['W2'].shape[1]-1:]
-        self.O1 = np.append(self.O1, np.dot(biasVect, [1])) #append bias to layer
-        #self.O1 = self.O1.reshape(-1,1) #append bias to layer 2
-
-        print("O1", self.O1)
-        print("W2", self.weights['W2'])
+        self.O1 = np.append(self.O1, [1]) #append bias to layer
         
         self.Z2 = np.dot(self.weights['W2'], self.O1.reshape(-1,1))
         self.O2 = self.sigmoid(self.Z2)
@@ -102,19 +128,13 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
 
     def backprop(self, row, labels):
         row = row.reshape(-1,1)
-
         O2 = self.O2.reshape(-1,1)#[0]
 
-        S = (labels - O2)*(O2)*(1 - O2)
-        print("S", S)
-        print("old dW2", self.dW2)
+        S = (labels.reshape(-1,1) - O2)*(O2)*(1 - O2)
         dW2 = (self.lr * S * self.O1) + (self.momentum * (self.dW2))  #zhe shi yi ge array, suo yi treat as such
-        print("dW2", dW2)
 
         S2 = self.O1 * (1-self.O1) * np.dot(S.T, self.weights['W2']) #* S * self.weights['W2']
-        print("S2", S2)
         dW1 = (self.lr * row * S2[:,:S2.shape[1] - 1]) +  (self.momentum * (self.dW1))#Don't need to propogate bias backwards
-        print("dW1", dW1)
 
         self.weights['W2'] += dW2
         self.weights['W1'] += dW1.T
@@ -125,7 +145,7 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         return
 
     def mse(self, output, label):
-        squared_errors = (output - label) ** 2
+        squared_errors = (output - label.T) ** 2
         loss= np.sum(squared_errors)
 
         return loss
@@ -139,13 +159,12 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
                 Predicted target values per element in X.
         """
 
-        pred = self.forward(np.append(X, 1))
-        print(pred)
-        pred = np.argmax(pred)
-        print("--PRED--", pred)
+        output = self.forward(np.append(X, 1))
+        #print("predInit", pred)
+        pred = np.argmax(output)
         #ARGMAX???
 
-        return pred
+        return pred, output
 
     def initialize_weights(self):
         """ Initialize weights for perceptron. Don't forget the bias!
@@ -157,6 +176,11 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         weights['W1'] = np.random.normal(0, 1, size=[self.hidden_layer_widths[1], self.hidden_layer_widths[0] + 1])
         weights['W2'] = np.random.normal(0, 1, size=[self.hidden_layer_widths[2], self.hidden_layer_widths[1] + 1])
         return  weights
+
+    def oneHotCode(self, labels): #to rule them all
+        onehotencoder = OneHotEncoder(categorical_features = [0])
+        hottie = onehotencoder.fit_transform(labels).toarray()
+        return hottie
 
     def score(self, X, y):
         """ Return accuracy of model on a given dataset. Must implement own score function.
@@ -170,30 +194,38 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         correctCount = 0
         totalCount = 0
 
-        for inputs, exp in zip(X, y):
-            pred = self.predict(inputs)
-            exp = np.asscalar(exp)
+        hoty = self.oneHotCode(y)
+        for inputs, exp in zip(X, hoty):
+            pred, output = self.predict(inputs)
+            print("output", output)
             print("pred", pred)
             print("exp", exp)
-            if(pred == exp): correctCount += 1
+            if(exp[pred] == 1):
+                print("correct")
+                correctCount += 1
             totalCount += 1
 
+        self.validMseArray.append(self.mse(self.oneHotCode(output), hoty))
         self.accuracy = correctCount/totalCount
         #find num outputs that we got right
         return self.accuracy
 
     def splitTestTrainData(self, X, y):
         #75/25 for nuw
-        if(self.shuffle): self._shuffle_data(X, y)
+        if(self.shuffle): 
+            X, y = self._shuffle_data(X, y)
 
         numRows = np.size(X, 0)
-        trainRows = math.floor(numRows / 10 * 75)
+        trainRows = math.floor(numRows / 4 * 3)
 
         trainData = X[0:trainRows, :]
         trainLabels = y[0:trainRows, :]
 
         testData = X[trainRows:, :]
         testLabels = y[trainRows:, :]
+
+        #print("testlabels", trainLabels.reshape(-1))
+
         return trainData, trainLabels, testData, testLabels
         
     def splitValidation(self, X, y, validSize):
@@ -201,7 +233,7 @@ class MLPClassifier(BaseEstimator,ClassifierMixin):
         numRows = np.size(X, 0)
         if(self.shuffle): self._shuffle_data(X, y)
 
-        trainRows = math.floor(numRows / validSize)
+        trainRows = math.floor(numRows * validSize)
 
         trainData = X[0:trainRows, :]
         trainLabels = y[0:trainRows, :]

@@ -13,31 +13,31 @@ def oneHotCode(labels): #to rule them all
 
 #debug dataset 1
 
-# print("----------DEBUG DATASET 1------")
-# mat = Arff("datasets/linsep2nonorigin.arff")
-# data = mat.data[:,0:-1]
-# labels = mat.data[:,-1].reshape(-1,1)
-# num_features = np.size(data, 1)
-# num_inputs = np.size(data, 0)
-# num_outputs = 2
-# hiddenLayers = [num_features, num_features * 2, num_outputs]
-# print("LAYER INFO INPUT")
-# print(hiddenLayers)
+print("----------DEBUG DATASET 1------")
+mat = Arff("datasets/linsep2nonorigin.arff")
+data = mat.data[:,0:-1]
+labels = mat.data[:,-1].reshape(-1,1)
+num_features = np.size(data, 1)
+num_inputs = np.size(data, 0)
+num_outputs = 2
+hiddenLayers = [num_features, num_features * 2, num_outputs]
+print("LAYER INFO INPUT")
+print(hiddenLayers)
 
-# MLP = MLPClassifier(hiddenLayers,lr=0.1,momentum=0.5,shuffle=True, validationSize=0.0, deterministic=10)
-# trainData, trainLabels, testData, testLabels = MLP.splitTestTrainData(data, labels)
+MLP = MLPClassifier(hiddenLayers,lr=0.1,momentum=0.5,shuffle=False, validationSize=0.0, deterministic=10)
+trainData, trainLabels, testData, testLabels = MLP.splitTestTrainData(data, labels)
 
-# print("labels", trainLabels)
-# print("testlabels", testLabels)
+print("labels", trainLabels)
+print("testlabels", testLabels)
 
-# weights = {}
-# weights['W1'] = np.zeros([hiddenLayers[1], hiddenLayers[0] + 1])
-# weights['W2'] = np.zeros([hiddenLayers[2], hiddenLayers[1] + 1])
+weights = {}
+weights['W1'] = np.zeros([hiddenLayers[1], hiddenLayers[0] + 1])
+weights['W2'] = np.zeros([hiddenLayers[2], hiddenLayers[1] + 1])
 
-# MLP.fit(trainData, trainLabels, weights)
-# print(MLP.get_weights())
+MLP.fit(trainData, trainLabels, weights)
+print(MLP.get_weights())
 
-# print("SCORE", MLP.score(testData, testLabels))
+print("SCORE", MLP.score(testData, testLabels))
 
 
 #HW PROB
@@ -62,26 +62,25 @@ def oneHotCode(labels): #to rule them all
 #get data
 
 print("----------DEBUG DATASET 2 (banknote)------")
-mat = Arff("datasets/data_banknote_authentication.arff")
-np_mat = mat.data
-data = np_mat[:,:-1]
-labels = np_mat[:,-1].reshape(-1,1)
+# #mat = Arff("datasets/data_banknote_authentication.arff")
+# mat = Arff("datasets/iris.arff")
+# np_mat = mat.data
+# data = np_mat[:,:-1]
+# labels = np_mat[:,-1].reshape(-1,1)
 
-#set dimensions
-num_features = np.size(data, 1)
-num_inputs = np.size(data, 0)
-num_outputs = np.size(np.unique(labels, 1),1)
-hiddenLayers = [num_features, num_features * 2, num_outputs]
-print("LAYER INFO INPUT")
-print(hiddenLayers)
+# #set dimensions
+# num_features = np.size(data, 1)
+# num_inputs = np.size(data, 0)
+# num_outputs = np.size(np.unique(labels, 1),1)
+# hiddenLayers = [num_features, num_features * 2, num_outputs]
+# print("LAYER INFO INPUT")
+# print(hiddenLayers)
 
-MLP = MLPClassifier(hiddenLayers,lr=0.1,momentum=0.5,shuffle=True, validationSize=0.0, deterministic=10)
-trainData, trainLabels, testData, testLabels = MLP.splitTestTrainData(data, labels)
+# #MLP = MLPClassifier(hiddenLayers,lr=0.1,momentum=0.5,shuffle=True, validationSize=0.0, deterministic=10)
+# MLP = MLPClassifier(hiddenLayers,lr=0.1,momentum=0.5,shuffle=True, validationSize=0.25, deterministic=False)
+# trainData, trainLabels, testData, testLabels = MLP.splitTestTrainData(data, labels)
 
-weights = {}
-weights['W1'] = np.zeros([hiddenLayers[1], hiddenLayers[0] + 1])
-weights['W2'] = np.zeros([hiddenLayers[2], hiddenLayers[1] + 1])
 
-MLP.fit(trainData, (trainLabels), weights)
-print(MLP.get_weights())
-print("SCORE", MLP.score(testData, (testLabels)))
+# MLP.fit(trainData, trainLabels)
+# print(MLP.get_weights())
+# print("SCORE", MLP.score(testData, (testLabels)))

@@ -1,5 +1,8 @@
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
+
 
 def graph_function(func,save_path=None):
     """ Simple demonstration of graphing a function
